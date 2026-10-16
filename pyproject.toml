@@ -1,0 +1,30 @@
+# Lets the app be installed like any Python program, on any distro:
+#   pipx install .          (then: ./install.sh  to add it to the app menu)
+# Running it straight from this folder with a venv still works too; see README.
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bonsai-kanban"
+version = "2.0.0"
+description = "Bonsai - kanban for Linux: boards, a Gantt timeline and calendar sync"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "PySide6-Essentials>=6.5",  # QtCore, QtGui, QtWidgets: all Bonsai uses
+    "icalendar>=6",
+]
+
+[project.gui-scripts]
+bonsai = "bonsai_kanban.main:main"
+
+[tool.setuptools]
+# This folder itself is installed as the bonsai_kanban package (only its .py
+# files and assets/; not venv/ or anything else).
+packages = ["bonsai_kanban"]
+package-dir = { "bonsai_kanban" = "." }
+
+[tool.setuptools.package-data]
+bonsai_kanban = ["assets/*"]

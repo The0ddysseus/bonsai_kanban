@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Bonsai
+GenericName=Kanban Board
+Comment=Kanban for Linux: boards, a Gantt timeline and calendar sync
+Exec=bonsai
+Icon=bonsai-kanban
+Terminal=false
+Categories=Office;ProjectManagement;
+Keywords=bonsai;kanban;tasks;todo;gantt;planner;board;
+StartupNotify=true
+StartupWMClass=bonsai-kanban
