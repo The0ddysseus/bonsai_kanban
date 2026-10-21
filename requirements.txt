@@ -1,2 +1,5 @@
 PySide6-Essentials>=6.5
-icalendar>=6
+icalendar>=6.1
+recurring-ical-events>=3
+tomli>=1.1; python_version < "3.11"
+# For the meeting alerter's voice (optional): venv/bin/pip install piper-tts

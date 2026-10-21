@@ -1,0 +1,19 @@
+# Bonsai's meeting alerter, as a systemd *user* service: it starts when you
+# log in and runs as you, inside your session, where it can play sound
+# (PipeWire) and show popups (the notification service, over D-Bus).
+# Install it with ./install.sh --alerts, which fills in @EXEC@.
+#   journalctl --user -u bonsai-alerts -f     follow its log
+#   systemctl --user restart bonsai-alerts    restart it (e.g. after updating)
+
+[Unit]
+Description=Bonsai spoken meeting alerts
+After=pipewire.service pipewire-pulse.service
+
+[Service]
+ExecStart=@EXEC@
+Restart=on-failure
+RestartSec=30
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

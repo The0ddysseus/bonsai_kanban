@@ -69,7 +69,8 @@ def _data_dir() -> Path:
     return bases[0] / DATA_FOLDER
 
 
-DB_PATH = _data_dir() / "kanban.db"
+DATA_DIR = _data_dir()
+DB_PATH = DATA_DIR / "kanban.db"
 
 
 def _now() -> str:
@@ -868,6 +869,20 @@ def set_calendar_url(board_id: int, url: str | None) -> None:
     conn.execute("UPDATE boards SET calendar_url = ? WHERE id = ?", (url or None, board_id))
     conn.commit()
     conn.close()
+
+
+def get_all_calendar_urls() -> list[str]:
+    """Every board's calendar link (for the meeting alerter, which runs
+    without the app). Empty if there's no database yet; doesn't make one.
+    """
+    if not DB_PATH.exists():
+        return []
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT calendar_url FROM boards WHERE calendar_url IS NOT NULL AND calendar_url != '' ORDER BY id"
+    ).fetchall()
+    conn.close()
+    return [row["calendar_url"] for row in rows]
 
 
 def get_calendar_events(board_id: int) -> dict:

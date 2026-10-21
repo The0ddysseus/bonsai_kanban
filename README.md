@@ -55,6 +55,11 @@ Archiving is still to come.
 - **Calendar sync**: new events in your Outlook, Google or other calendar
   appear as cards in the "Calendar" column — a different calendar for each
   board if you like (see *Calendar sync* below).
+- **Spoken meeting alerts**: 15 minutes before each meeting in your
+  calendar, a chime, a voice saying what's coming up ("Project Stand Up
+  starts at ten a.m., in fifteen minutes. It's a Teams meeting.") and a
+  popup -- even with Bonsai closed. Switch the sound off for a while from
+  the Calendar menu (see *Spoken meeting alerts* below).
 - **Light / dark theme**: "Appearance" in the toolbar → Match system,
   Light or Dark. "Match system" follows your desktop's light/dark setting,
   switching straight away if you change it. Cards stay white in both.
@@ -99,7 +104,18 @@ works normally (it takes its date's place there).
 
 ## Install
 
-Either way, run these from this folder.
+First, Qt needs one system library that many distros don't install by
+default (without it the app fails with *Could not load the Qt platform
+plugin "xcb"*):
+
+```bash
+sudo apt install libxcb-cursor0        # Ubuntu / Mint / Debian
+sudo dnf install xcb-util-cursor       # Fedora
+sudo pacman -S xcb-util-cursor         # Arch
+```
+
+Then, either way, run these from this folder. (The first install downloads
+PySide6, a few hundred MB, so it can sit quietly for a few minutes.)
 
 **Option A — install it as a program** (simplest; needs
 [pipx](https://pipx.pypa.io), which most distros package as `pipx`):
@@ -108,6 +124,8 @@ Either way, run these from this folder.
 pipx install .
 ./install.sh        # adds "Bonsai" to your application menu, with its icon
 ```
+
+(For spoken meeting alerts as well, see *Spoken meeting alerts* below.)
 
 Run it from the menu, or with `bonsai` in a terminal. To update after
 changing the code: `pipx install --force .`
@@ -258,6 +276,82 @@ applications for one called Teams that can open links:
 your own command instead (with `{url}` where the link goes, e.g.
 `brave-browser --app={url}`).
 
+## Spoken meeting alerts
+
+A small background program, `bonsai-alerts`, that watches the same calendar
+links as your boards. 15 minutes before each meeting it plays a chime, says
+what's coming up (with [Piper](https://github.com/OHF-Voice/piper1-gpl), a
+voice that runs on your computer) and shows a popup. It runs as a systemd
+user service, so it starts when you log in and works whether or not Bonsai
+is open.
+
+**Setting it up** (run from this folder, in a normal terminal):
+
+1. Install it, with Piper:
+   - if you installed Bonsai with pipx: `pipx install --force '.[alerts]'`
+   - if you run it from a venv here: `venv/bin/pip install -r requirements.txt piper-tts`
+2. Download a voice: a `.onnx` model and its `.onnx.json`, into
+   `~/.local/share/bonsai-kanban/voices/`. The default is
+   `en_US-lessac-medium`:
+
+   ```bash
+   mkdir -p ~/.local/share/bonsai-kanban/voices
+   cd ~/.local/share/bonsai-kanban/voices
+   VOICE=https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/lessac/medium/en_US-lessac-medium
+   curl -L -O "$VOICE.onnx" -O "$VOICE.onnx.json"
+   ```
+
+   For a different voice, pick one from
+   [Piper's voice list](https://huggingface.co/rhasspy/piper-voices/tree/main/en)
+   (the `medium` ones are a good balance of quality and speed; e.g. the
+   `en_GB` voices for a British accent), download its two files the same
+   way, and set `voice_model` (step 3).
+3. Optional settings: copy `alerts.example.toml` to
+   `~/.config/bonsai-kanban/alerts.toml` and edit it -- your name for the
+   greeting, your email address, the lead time, the voice, the chime, popup
+   urgency ("critical" stays on screen until dismissed), and words to say
+   differently (e.g. `QBR = "Q B R"`). Changes are picked up by themselves.
+4. Try it: `bonsai-alerts --test` (or `venv/bin/python alerter.py --test`)
+   sounds a sample alert; `--list` shows the next day's meetings and what
+   each alert will say.
+5. Start it at every login: `./install.sh --alerts`.
+
+**Switching the sound off for a while**: Bonsai's **Calendar** menu →
+**Spoken meeting alerts** (ticked = on). Unticked, alerts still pop up but
+make no sound. To stop the alerts altogether:
+`systemctl --user disable --now bonsai-alerts` (`./install.sh --alerts`
+turns them back on).
+
+**What gets announced**: every meeting in the calendar, recurring ones
+included (with moved or cancelled occurrences handled), except all-day
+events, cancelled ones, ones you've declined, and ones already started. If
+the alerter starts late (say just after you log in) and a meeting is less
+than 15 minutes away, it's announced straight away. Each alert goes off
+once, even across restarts; a meeting moved to a new time is announced
+again at the new time. Just before an alert, the calendar is checked again,
+so a meeting cancelled (or removed from the calendar) at the last minute
+isn't announced. Several at once play one after another.
+
+Good to know:
+
+- **Who's in the meeting**: Outlook's published calendars don't include
+  attendees, so with Outlook alerts are the short kind ("Project Stand Up
+  starts at ten a.m. ..."). Calendars that do include them get "...with
+  Sarah Chen and Tom Walsh ...". For the same reason it can't tell if you
+  declined an Outlook meeting -- but Outlook usually removes declined
+  meetings from your calendar anyway.
+- **Calendar link**: the alerter uses every board's calendar link, or
+  `ics_url` in its settings instead. Calendar delays (see *Calendar sync*)
+  apply here too.
+- **Its log**: `journalctl --user -u bonsai-alerts -f` shows what it's doing
+  and anything that went wrong (no voice installed, no sound player, a
+  failed download -- after which it keeps using the last copy it got).
+  Calendar links never appear in full in the log.
+- It keeps a small `alerts.db` (which alerts have gone off) next to your
+  boards, and the speech it makes in `~/.cache/bonsai-kanban/speech/`.
+- Sound plays through your default output with `pw-play` (or `paplay`).
+- Not in the AppImage (it has no Piper); use pipx or a venv for alerts.
+
 ## Project layout
 
 ```
@@ -268,7 +362,13 @@ database.py      - SQLite schema, migrations, all persistence functions
 widgets.py       - CardWidget, CardListWidget (drag/drop), ColumnWidget
 card_dialog.py   - the add/edit card popup (title, description, dates, labels, sub-tasks, links, attachments)
 gantt_view.py    - the Gantt timeline view and the card popup it opens
+ics_feed.py      - downloading and reading calendars (time zones, recurring events), shared
 calendar_sync.py - calendar (.ics link) -> cards in the Calendar column
+alerter.py       - the meeting alerter (bonsai-alerts): when to announce what
+alerts_*.py      - its settings, alert records, wording, sound (Piper) and popups
+alerts.example.toml - the alerter's settings, explained
+packaging/systemd/  - the alerter's systemd user service (see install.sh --alerts)
+tests/           - python -m unittest discover tests
 links.py         - opening clicked links (Teams links in a Teams app)
 label_dialog.py  - the "Manage Labels" popup + a shared color-swatch icon helper
 theme.py         - light / dark / match-system palettes

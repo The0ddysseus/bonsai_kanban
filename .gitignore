@@ -6,3 +6,6 @@ build/
 dist/
 *.egg-info/
 *.db
+# The alerter's settings hold your private calendar link; they belong in
+# ~/.config/bonsai-kanban/, never here.
+alerts.toml

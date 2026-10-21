@@ -1,0 +1,56 @@
+# Settings for Bonsai's meeting alerts. Copy this file to
+#   ~/.config/bonsai-kanban/alerts.toml
+# and change what you like; anything left out (or commented out) keeps the
+# default shown. The alerter picks up changes by itself, within 15 seconds.
+# Don't put your copy in the project folder: with ics_url set, it holds your
+# private calendar link.
+
+# Your calendar's published .ics link. Leave it out to use the calendar
+# links set on Bonsai's boards (Calendar → Set calendar link for this board).
+# ics_url = "https://outlook.office365.com/owa/calendar/.../calendar.ics"
+
+# For "Hey Derek." at the start of the spoken alert.
+user_name = "Derek"
+
+# Your own address: left out when saying who a meeting is with, and used to
+# skip meetings you've declined (when the calendar includes attendees).
+# user_email = "you@example.com"
+
+# Minutes before a meeting to announce it, and how often (minutes) to check
+# the calendar for changes.
+lead_minutes = 15
+poll_minutes = 5
+
+# IANA time zone for the times spoken and shown, e.g. "Australia/Brisbane".
+# Leave empty to use the computer's.
+timezone = ""
+
+# Piper voice (the .onnx file; its .json must be next to it). See the README
+# for how to download one.
+# voice_model = "~/.local/share/bonsai-kanban/voices/en_US-lessac-medium.onnx"
+
+# Sound played before the speech (.oga, .ogg, .wav or .flac).
+# chime_sound = "/usr/share/sounds/freedesktop/stereo/message-new-instant.oga"
+
+# Popup urgency: "low", "normal", or "critical" (stays until you dismiss it).
+urgency = "normal"
+
+# Switch the parts of an alert on or off. (Bonsai's Calendar menu also has
+# "Spoken meeting alerts", which mutes the chime and speech for the moment.)
+play_chime = true
+play_speech = true
+show_popup = true
+
+# What's said. Placeholders: {user_name} {title} {participants}
+# {spoken_time} {time_until}. "It's a Teams meeting." or "In <location>."
+# is added after.
+# spoken_template = "Hey {user_name}. {title} with {participants} starts at {spoken_time}, in {time_until}."
+# Used when the calendar doesn't say who's in the meeting (Outlook's
+# published calendars usually don't):
+# spoken_template_no_attendees = "{title} starts at {spoken_time}, in {time_until}."
+
+# Words to say differently, for the spoken alert only (whole words, as
+# written, capitals and all).
+[pronunciations]
+# QBR = "Q B R"
+# Siobhan = "Shiv awn"

@@ -29,26 +29,23 @@ import hashlib
 import html
 import re
 import threading
-import urllib.request
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 
-import icalendar
 from PySide6.QtCore import QObject, QTimer, Signal
 
 import database as db
+import ics_feed
 
 CALENDAR_COLUMN_NAME = "Calendar"
 CANCELLED_LABEL_NAME = "Cancelled"
 CANCELLED_LABEL_COLOR = "#d92d20"
 SYNC_INTERVAL_MS = 5 * 60 * 1000
 
-_CANCELLED_PREFIX = re.compile(r"^\s*(?:canceled|cancelled)\s*:\s*", re.IGNORECASE)
 # Where the meeting-service boilerplate starts in an invite's text: Outlook's
 # "_____" line, or Google's "-::~:~::~:...::-" line.
 _SEPARATOR_LINE = re.compile(r"^(?:_{10,}|-::~[:~]+-?)\s*$")
 _HTML_TAG = re.compile(r"<\s*/?\s*(?:br|p|div|a|b|i|u|span|ul|ol|li|html|body)\b[^>]*>", re.IGNORECASE)
-_TEAMS_JOIN_URL = re.compile(r"https://teams\.microsoft\.com/(?:meet|l/meetup-join)/[^\s<>]+")
 
 
 @dataclass
@@ -120,7 +117,7 @@ def _clean_body(text: str) -> str:
 
 def _teams_details(text: str) -> list[str]:
     """ "Join: <link>" plus the meeting ID and passcode, when it's a Teams meeting."""
-    join = _TEAMS_JOIN_URL.search(text)
+    join = ics_feed.TEAMS_JOIN_URL.search(text)
     if not join:
         return []
     details = [f"Join: {join.group()}"]
@@ -131,24 +128,9 @@ def _teams_details(text: str) -> list[str]:
     return details
 
 
-def _to_event(component) -> CalendarEvent:
-    title = str(component.get("SUMMARY", "")).strip() or "(no title)"
-    cancelled = str(component.get("STATUS", "")).upper() == "CANCELLED"
-    if _CANCELLED_PREFIX.match(title):  # e.g. Outlook's "Canceled: <subject>"
-        cancelled = True
-        title = _CANCELLED_PREFIX.sub("", title) or "(no title)"
-
-    start = component.decoded("DTSTART")
-    if "DTEND" in component:
-        end = component.decoded("DTEND")
-    elif "DURATION" in component:
-        end = start + component.decoded("DURATION")
-    else:
-        end = start
-
-    if isinstance(start, datetime):
-        start = start.astimezone() if start.tzinfo else start
-        end = end.astimezone() if end.tzinfo else end
+def _to_event(event: ics_feed.Occurrence) -> CalendarEvent:
+    start, end = event.start, event.end
+    if not event.all_day:
         start_day = start.date()
         # A meeting ending at exactly midnight finishes on the day before.
         end_day = (end - timedelta(microseconds=1)).date() if end > start else start_day
@@ -158,37 +140,32 @@ def _to_event(component) -> CalendarEvent:
         end_day = end - timedelta(days=1) if end > start else start
         when = "All day"
 
-    raw_description = _plain_text(str(component.get("DESCRIPTION", "")))
-    location = str(component.get("LOCATION", "")).strip()
+    raw_description = _plain_text(event.description)
+    location = event.location
     join = _teams_details(raw_description)
     if join and location.lower() == "microsoft teams meeting":
         location = ""  # the Join line says so already
-    if not join and component.get("X-GOOGLE-CONFERENCE"):
-        join = [f"Join: {component.get('X-GOOGLE-CONFERENCE')}"]  # Google Meet
-        if location == str(component.get("X-GOOGLE-CONFERENCE")):
+    if not join and event.conference:
+        join = [f"Join: {event.conference}"]  # Google Meet
+        if location == event.conference:
             location = ""
     header = [f"{when} · {location}" if location else when, *join]
     body = _clean_body(raw_description)
     description = "\n".join(header) + (f"\n\n{body}" if body else "")
 
     return CalendarEvent(
-        uid=str(component.get("UID")),
-        title=title,
+        uid=event.uid,
+        title=event.title,
         action_start=start_day.isoformat(),
         action_end=max(end_day, start_day).isoformat(),
         description=description,
-        cancelled=cancelled,
+        cancelled=event.cancelled,
     )
 
 
 def parse_events(ics_data: bytes) -> list[CalendarEvent]:
     """The one-off (non-recurring) events in an .ics file."""
-    calendar = icalendar.Calendar.from_ical(ics_data)
-    return [
-        _to_event(component)
-        for component in calendar.walk("VEVENT")
-        if not any(key in component for key in ("RRULE", "RDATE", "RECURRENCE-ID")) and component.get("UID")
-    ]
+    return [_to_event(event) for event in ics_feed.one_off_events(ics_feed.read_calendar(ics_data))]
 
 
 def _calendar_column_id(board_id: int) -> tuple[int, bool]:
@@ -287,9 +264,7 @@ class CalendarSync(QObject):
 
     @staticmethod
     def set_url(board_id: int, url: str | None) -> None:
-        if url and url.lower().startswith("webcal://"):
-            url = "https://" + url[len("webcal://"):]
-        db.set_calendar_url(board_id, url or None)
+        db.set_calendar_url(board_id, ics_feed.normalise_url(url or "") or None)
 
     def sync_all(self):
         for board in db.get_boards():
@@ -304,11 +279,9 @@ class CalendarSync(QObject):
 
     def _download(self, board_id: int, url: str):
         try:
-            request = urllib.request.Request(url, headers={"User-Agent": "bonsai-kanban"})
-            with urllib.request.urlopen(request, timeout=30) as response:
-                self._downloaded.emit(board_id, response.read(), "")
-        except Exception as error:
-            self._downloaded.emit(board_id, None, str(getattr(error, "reason", error)))
+            self._downloaded.emit(board_id, ics_feed.fetch(url), "")
+        except OSError as error:
+            self._downloaded.emit(board_id, None, str(error))
 
     def _on_downloaded(self, board_id: int, data: bytes | None, error: str):
         self._busy.discard(board_id)

@@ -25,6 +25,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QTimer, QStandardPaths, QPoint, QSize
 from PySide6.QtGui import QAction, QActionGroup, QImageReader, QKeySequence, QShortcut
 
+import alerts_config
 import database as db
 from widgets import BackgroundImage, BoardArea, BoardScrollArea, ColumnWidget, board_lanes, unfinished_blockers
 from card_dialog import CardDialog
@@ -177,6 +178,15 @@ class MainWindow(QMainWindow):
         calendar_menu.addAction("Set calendar link for this board...").triggered.connect(self._on_set_calendar_link)
         calendar_menu.addSeparator()
         calendar_menu.addAction("Teams links...").triggered.connect(self._on_set_teams_command)
+        calendar_menu.addSeparator()
+        # Read by the meeting alerter (alerter.py), which runs on its own;
+        # off mutes its chime and speech but leaves the popups.
+        self.spoken_alerts_action = calendar_menu.addAction("Spoken meeting alerts")
+        self.spoken_alerts_action.setCheckable(True)
+        self.spoken_alerts_action.setChecked(db.get_setting(alerts_config.SPOKEN_SETTING) != "off")
+        self.spoken_alerts_action.toggled.connect(
+            lambda on: db.set_setting(alerts_config.SPOKEN_SETTING, "on" if on else "off")
+        )
         calendar_menu.addSeparator()
         self.calendar_status_action = calendar_menu.addAction("")
         self.calendar_status_action.setEnabled(False)
